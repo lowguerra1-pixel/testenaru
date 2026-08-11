@@ -105,6 +105,9 @@
   .slot:hover{border-color:#5a4a4f}
   .slot.sel{border-color:var(--red2);background:linear-gradient(180deg,rgba(225,29,42,.16),transparent)}
   .slot.full{opacity:.3;cursor:not-allowed}
+  .slot.walkin{cursor:default;border-style:dashed;background:transparent;opacity:.75}
+  .slot.walkin .t{color:var(--muted);font-weight:600}
+  .slot.walkin .s{color:var(--gold)}
   .slot .s.ok{color:var(--green)} .slot .s.low{color:var(--amber)}
 
   .review{border:1px solid var(--line);border-radius:14px;background:var(--bg2);overflow:hidden}
@@ -113,6 +116,8 @@
   .sumline .k{color:var(--muted)} .sumline .v{font-weight:700;text-align:right}
 
   .empty{color:var(--muted);text-align:center;padding:26px 10px;font-size:14px}
+  .notice{background:rgba(201,146,43,.1);border:1px solid rgba(201,146,43,.32);color:#e2b458;border-radius:12px;padding:12px 15px;font-size:13px;line-height:1.5}
+  .notice b{color:#f0c876}
   .hint{color:var(--muted);font-size:12.5px;line-height:1.55}
   .code{font-family:ui-monospace,Menlo,monospace;letter-spacing:.05em}
 
@@ -324,9 +329,9 @@
 const REST = {
   name:"NARU PRIME",
   areas:[
-    {id:"balcao_p", name:"Balcão principal", desc:"Sushi bar · 28 lugares", cap:28, icon:"🍣"},
-    {id:"balcao_i", name:"Balcão íntimo",    desc:"Reservado · 10 lugares", cap:10, icon:"🍶"},
-    {id:"mesas",    name:"Mesas",            desc:"Salão · 40 lugares",     cap:40, icon:"🍽️"},
+    {id:"balcao_1", name:"Balcão 1", desc:"Balcão · 10 lugares", cap:10, icon:"🍶", reserva:"primeiros"},
+    {id:"balcao_2", name:"Balcão 2", desc:"Balcão · 28 lugares", cap:28, icon:"🍣", reserva:"primeiros"},
+    {id:"mesas",    name:"Mesas",    desc:"Salão · 40 lugares",  cap:40, icon:"🍽️", reserva:"aberto"},
   ],
   hours:{
     0:[["12:30","16:00"],["19:00","22:00"]],
@@ -337,10 +342,13 @@ const REST = {
     5:[["12:00","15:00"],["19:00","23:00"]],
     6:[["12:30","16:00"],["19:00","23:00"]],
   },
-  slotStep:30, lastSeatingBuffer:60, password:"naru2026",
+  slotStep:30, lastSeatingBuffer:60,
+  firstSlotsCount:2,   // qtd de horários reserváveis por serviço no balcão (resto = ordem de chegada)
+  tolerance:10,        // minutos de tolerância antes do cancelamento
+  password:"naru2026",
 };
 const WD = ["Domingo","Segunda-feira","Terça-feira","Quarta-feira","Quinta-feira","Sexta-feira","Sábado"];
-const STORE = "naru_reservas_v1";
+const STORE = "naru_reservas_v2";
 
 /* ================= STORAGE ================= */
 let reservas = load();
@@ -350,11 +358,11 @@ function uid(){ return Math.random().toString(36).slice(2,7).toUpperCase(); }
 function seed(){
   const d0=todayISO(), d1=addDays(d0,1);
   const demo=[
-    {id:uid(),name:"Marina Tanaka",phone:"(11) 98877-1200",date:d0,time:"20:00",area:"balcao_p",party:2,notes:"",status:"confirmada",createdAt:Date.now()},
+    {id:uid(),name:"Marina Tanaka",phone:"(11) 98877-1200",date:d0,time:"19:00",area:"balcao_2",party:2,notes:"",status:"confirmada",createdAt:Date.now()},
     {id:uid(),name:"Rafael Souza",phone:"(11) 97555-3321",date:d0,time:"20:00",area:"mesas",party:4,notes:"Aniversário",status:"confirmada",createdAt:Date.now()},
-    {id:uid(),name:"Grupo Yamamoto",phone:"(11) 96000-4545",date:d0,time:"19:30",area:"balcao_i",party:6,notes:"",status:"pendente",createdAt:Date.now()},
+    {id:uid(),name:"Grupo Yamamoto",phone:"(11) 96000-4545",date:d0,time:"19:30",area:"balcao_1",party:6,notes:"",status:"pendente",createdAt:Date.now()},
     {id:uid(),name:"Ana Prado",phone:"(11) 99123-0007",date:d0,time:"13:00",area:"mesas",party:2,notes:"",status:"confirmada",createdAt:Date.now()},
-    {id:uid(),name:"Lucas Verdi",phone:"(11) 98080-1122",date:d1,time:"21:00",area:"balcao_p",party:3,notes:"",status:"confirmada",createdAt:Date.now()},
+    {id:uid(),name:"Lucas Verdi",phone:"(11) 98080-1122",date:d1,time:"19:00",area:"balcao_2",party:3,notes:"",status:"confirmada",createdAt:Date.now()},
   ];
   localStorage.setItem(STORE, JSON.stringify(demo)); return demo;
 }
@@ -380,6 +388,10 @@ function periodsFor(s){
 function areaById(id){ return REST.areas.find(a=>a.id===id); }
 function usedSeats(d,t,a){ return reservas.filter(r=>r.date===d&&r.time===t&&r.area===a&&r.status!=="cancelada").reduce((s,r)=>s+r.party,0); }
 function freeSeats(d,t,a){ return areaById(a).cap - usedSeats(d,t,a); }
+function reservaMode(a){ return areaById(a)?.reserva || "aberto"; }
+// horários que aceitam reserva num período: 'aberto' = todos; 'primeiros' = só os N primeiros
+function reservableSlots(a,period){ return reservaMode(a)==="primeiros" ? period.slots.slice(0,REST.firstSlotsCount) : period.slots; }
+function isReservable(d,t,a){ return reservaMode(a)==="aberto" ? true : periodsFor(d).some(p=>p.slots.slice(0,REST.firstSlotsCount).includes(t)); }
 
 /* ================= VIEW SWITCH ================= */
 function showView(v){
@@ -481,14 +493,15 @@ function setParty(n){ draft.party=n; draft.time=null; renderQuiz(); }
 function setPartySelect(v){ if(!v) return; draft.party=Math.max(1,+v||1); draft.time=null; renderQuiz(); }
 function stepArea(){
   const cards=REST.areas.map(a=>{
-    // maior disponibilidade do dia como referência
+    // maior disponibilidade do dia, considerando só os horários reserváveis
     const periods=periodsFor(draft.date);
-    let maxFree=0; periods.forEach(p=>p.slots.forEach(t=>{ maxFree=Math.max(maxFree,freeSeats(draft.date,t,a.id)); }));
+    let maxFree=0; periods.forEach(p=>reservableSlots(a.id,p).forEach(t=>{ maxFree=Math.max(maxFree,freeSeats(draft.date,t,a.id)); }));
     const enough=maxFree>=draft.party;
+    const tag=a.reserva==="aberto"?"qualquer horário":"primeiros horários";
     return `<button class="area ${draft.area===a.id?'sel':''} ${enough?'':'full'}" ${enough?`onclick="setArea('${a.id}')"`:''}>
       <span class="ic">${a.icon}</span>
       <span><span class="nm">${a.name}</span><span class="cap">${a.desc}</span></span>
-      <span class="rt">${enough?'disponível':'lotado p/ '+draft.party}</span>
+      <span class="rt">${enough?tag:'sem vaga p/ '+draft.party}</span>
     </button>`;
   }).join("");
   return `<div class="step">
@@ -496,6 +509,7 @@ function stepArea(){
     <h2 class="q-title">Onde prefere sentar?</h2>
     <p class="q-sub">Balcão para acompanhar o preparo de perto, ou mesa no salão.</p>
     <div class="areas">${cards}</div>
+    <p class="hint" style="margin-top:14px;line-height:1.6">🍶 <b style="color:var(--ink)">Balcões:</b> reserva apenas nos primeiros horários de cada serviço; os demais são por <b style="color:var(--ink)">ordem de chegada</b>.<br>🍽️ <b style="color:var(--ink)">Mesas:</b> qualquer horário disponível.</p>
     <div class="nav">
       <button class="btn ghost" onclick="back()">← Voltar</button>
       <button class="btn" id="area-next" ${draft.area?'':'disabled'} onclick="next()">Continuar →</button>
@@ -505,25 +519,36 @@ function stepArea(){
 function setArea(id){ draft.area=id; draft.time=null; renderQuiz(); }
 function stepTime(){
   const periods=periodsFor(draft.date);
+  const mode=reservaMode(draft.area);
   let inner="";
   periods.forEach(p=>{
     inner+=`<div class="period-title">${p.label} · ${p.start}–${p.end}</div><div class="slots">`;
+    const resv=reservableSlots(draft.area,p);
     p.slots.forEach(t=>{
-      const free=freeSeats(draft.date,t,draft.area);
-      const ok=free>=draft.party;
-      const cls=!ok?"full":(draft.time===t?"sel":"");
-      const sc=free<=0?"":(free<=6?"low":"ok");
-      const lbl=free<=0?"lotado":free+" livres";
-      inner+=`<button class="slot ${cls}" ${ok?`onclick="setTime('${t}')"`:""}><div class="t">${t}</div><div class="s ${sc}">${lbl}</div></button>`;
+      if(resv.includes(t)){
+        const free=freeSeats(draft.date,t,draft.area);
+        const ok=free>=draft.party;
+        const cls=!ok?"full":(draft.time===t?"sel":"");
+        const sc=free<=0?"":(free<=6?"low":"ok");
+        const lbl=free<=0?"lotado":free+" livres";
+        inner+=`<button class="slot ${cls}" ${ok?`onclick="setTime('${t}')"`:""}><div class="t">${t}</div><div class="s ${sc}">${lbl}</div></button>`;
+      }else{
+        // balcão: horários fora da reserva = por ordem de chegada
+        inner+=`<div class="slot walkin" title="Atendimento por ordem de chegada"><div class="t">${t}</div><div class="s">chegada</div></div>`;
+      }
     });
     inner+=`</div>`;
   });
   const a=areaById(draft.area);
+  const policy = mode==="primeiros"
+    ? `<p class="hint" style="margin-top:16px;line-height:1.6">⏳ No balcão, só os <b style="color:var(--ink)">primeiros horários</b> aceitam reserva. Os marcados como <b style="color:var(--gold)">"chegada"</b> são por <b style="color:var(--ink)">ordem de chegada</b>, sem reserva.</p>`
+    : "";
   return `<div class="step">
     <div class="q-ki">QUE HORAS</div>
     <h2 class="q-title">Escolha o horário</h2>
     <p class="q-sub">${prettyDate(draft.date)} · ${a.name} · ${draft.party} ${draft.party===1?'pessoa':'pessoas'}. O número indica lugares livres.</p>
     ${inner||'<p class="empty">Fechado nesta data.</p>'}
+    ${policy}
     <div class="nav">
       <button class="btn ghost" onclick="back()">← Voltar</button>
       <button class="btn" id="time-next" ${draft.time?'':'disabled'} onclick="next()">Continuar →</button>
@@ -566,6 +591,7 @@ function stepReview(){
       <div class="sumline"><span class="k">Telefone</span><span class="v">${escapeHtml(draft.phone)}</span></div>
       ${draft.notes?`<div class="sumline"><span class="k">Observação</span><span class="v">${escapeHtml(draft.notes)}</span></div>`:""}
     </div>
+    <div class="notice" style="margin-top:16px">⏳ <b>Tolerância de ${REST.tolerance} minutos.</b> Após esse tempo sem comparecimento, a reserva poderá ser cancelada e a mesa liberada.</div>
     <div class="nav">
       <button class="btn ghost" onclick="back()">← Voltar</button>
       <button class="btn" onclick="confirmReserva()">Enviar reserva ✓</button>
@@ -574,6 +600,7 @@ function stepReview(){
 }
 let lastCode="";
 function confirmReserva(){
+  if(!isReservable(draft.date,draft.time,draft.area)){ toast("Este horário é por ordem de chegada. Escolha um horário reservável.",true); goto("time"); return; }
   if(freeSeats(draft.date,draft.time,draft.area)<draft.party){ toast("Este horário acabou de lotar. Escolha outro.",true); goto("time"); return; }
   const r={id:uid(),name:draft.name.trim(),phone:draft.phone.trim(),date:draft.date,time:draft.time,area:draft.area,party:draft.party,notes:draft.notes.trim(),status:"pendente",createdAt:Date.now()};
   reservas.push(r); save(); lastCode=r.id; goto("done");
@@ -586,6 +613,7 @@ function stepDone(){
     <p>Obrigado, <b>${escapeHtml(draft.name.split(" ")[0])}</b>. Registramos seu pedido para <b>${draft.party} ${draft.party===1?'pessoa':'pessoas'}</b> em <b>${a.name}</b>, ${prettyShort(draft.date)} às <b>${draft.time}</b>.</p>
     <div class="ticket"><div class="lbl">CÓDIGO DA RESERVA</div><div class="val code">${lastCode}</div></div>
     <div><span class="waitpill"><span class="pulse"></span>Aguarde — iremos confirmar sua reserva</span></div>
+    <div class="notice" style="max-width:420px;margin:0 auto 18px;text-align:left">⏳ <b>Tolerância de ${REST.tolerance} minutos.</b> Chegue no horário: após ${REST.tolerance} min de atraso, a reserva poderá ser cancelada.</div>
     <p class="hint" style="max-width:380px;margin:0 auto 24px">Você receberá a confirmação pelo telefone informado. Em caso de imprevisto, ligue para (11) 3641-6679.</p>
     <div class="nav" style="max-width:320px;margin:0 auto">
       <button class="btn ghost" onclick="newReserva()">Nova reserva</button>

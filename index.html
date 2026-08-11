@@ -171,6 +171,63 @@
   .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(3px);z-index:90;display:none;place-items:center;padding:20px}
   .modal-bg.show{display:grid}
   .modal{width:100%;max-width:460px}
+
+  /* ============ MOBILE ============ */
+  @media(max-width:600px){
+    body{-webkit-text-size-adjust:100%}
+    .wrap{padding:0 14px}
+
+    /* cabeçalho em 2 linhas: marca em cima, abas full-width embaixo */
+    .top-inner{flex-direction:column;height:auto;padding:12px 0;gap:12px;align-items:stretch}
+    .brand{justify-content:center}
+    .brand .mark{width:34px;height:34px;font-size:17px;border-radius:9px}
+    .brand h1{font-size:15px;letter-spacing:.14em;white-space:nowrap}
+    .brand small{font-size:8.5px;letter-spacing:.18em;white-space:nowrap}
+    .tabs{width:100%}
+    .tabs button{flex:1;padding:11px 8px;font-size:13px}
+
+    /* quiz */
+    .quiz-shell{padding:22px 14px 54px}
+    .qcard{padding:22px 16px;border-radius:14px}
+    .q-title{font-size:22px}
+    .q-sub{font-size:13.5px}
+    .chips{grid-template-columns:repeat(4,1fr);gap:8px}
+    .chip{padding:13px 2px;font-size:16px}
+    .chip small{font-size:9.5px}
+    .area{padding:14px}
+    .area .ic{width:40px;height:40px;font-size:20px}
+    .area .rt{display:none}
+    .slots{grid-template-columns:repeat(auto-fill,minmax(72px,1fr));gap:7px}
+    .nav{gap:8px}
+    .btn{padding:14px 14px;font-size:14px}
+    .btn.ghost{padding:14px 14px}
+    .ticket{padding:14px 20px}
+    .ticket .val{font-size:26px}
+
+    /* admin hero + toolbar */
+    .hero{padding:22px 0 4px}
+    .hero h2{font-size:22px}
+    .toolbar{flex-direction:column;align-items:stretch;gap:10px}
+    .toolbar .grow{display:none}
+    .toolbar label.f,.toolbar .btn.sm{width:100%}
+    .kpis{gap:10px}
+    .kpi{padding:14px}
+    .kpi .n{font-size:22px}
+    .card .hd{flex-direction:column;align-items:flex-start;gap:4px}
+
+    /* tabela de reservas vira CARDS */
+    #a-table table,#a-table thead,#a-table tbody,#a-table tr,#a-table td{display:block;width:100%}
+    #a-table thead{position:absolute;left:-9999px}
+    #a-table tr{border:1px solid var(--line);border-radius:12px;margin:14px;background:var(--bg2);overflow:hidden}
+    #a-table tr:hover td{background:transparent}
+    #a-table td{display:flex;justify-content:space-between;align-items:center;gap:14px;border:0;border-bottom:1px solid var(--line);padding:11px 14px;text-align:right}
+    #a-table td::before{content:attr(data-label);color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em;text-align:left;flex:0 0 auto;font-weight:600}
+    #a-table td.acts{justify-content:flex-start;flex-wrap:wrap;text-align:left;gap:6px;background:rgba(0,0,0,.18);border-bottom:0}
+    #a-table td.acts::before{display:none}
+    #a-table td.acts .tinybtn{margin:0;flex:1;text-align:center;min-width:92px}
+    #a-table td[data-label="Cliente"]{flex-wrap:wrap}
+    #a-table td[data-label="Cliente"] .hint{flex-basis:100%;text-align:right;white-space:normal;word-break:break-word;margin-top:2px}
+  }
 </style>
 </head>
 <body>
@@ -567,12 +624,12 @@ function renderAdmin(){
     let rows="";
     day.forEach(r=>{ const a=areaById(r.area);
       rows+=`<tr>
-        <td><b>${r.time}</b></td>
-        <td>${escapeHtml(r.name)}<div class="hint" style="font-size:11px">${escapeHtml(r.phone)} · #${r.id}</div></td>
-        <td>${r.party}</td><td>${a?a.name:r.area}</td>
-        <td>${r.notes?`<span class="pill">${escapeHtml(r.notes)}</span>`:'<span class="hint">—</span>'}</td>
-        <td><span class="badge ${r.status}"><span class="dot"></span>${r.status}</span></td>
-        <td style="white-space:nowrap;text-align:right">
+        <td data-label="Hora"><b>${r.time}</b></td>
+        <td data-label="Cliente">${escapeHtml(r.name)}<div class="hint" style="font-size:11px">${escapeHtml(r.phone)} · #${r.id}</div></td>
+        <td data-label="Pessoas">${r.party}</td><td data-label="Ambiente">${a?a.name:r.area}</td>
+        <td data-label="Obs.">${r.notes?`<span class="pill">${escapeHtml(r.notes)}</span>`:'<span class="hint">—</span>'}</td>
+        <td data-label="Status"><span class="badge ${r.status}"><span class="dot"></span>${r.status}</span></td>
+        <td class="acts" style="white-space:nowrap;text-align:right">
           ${r.status!=="confirmada"?`<button class="tinybtn g" onclick="setStatus('${r.id}','confirmada')">✓ Confirmar</button>`:""}
           ${r.status!=="cancelada"?`<button class="tinybtn r" onclick="setStatus('${r.id}','cancelada')">✕ Cancelar</button>`:`<button class="tinybtn g" onclick="setStatus('${r.id}','pendente')">↺ Reabrir</button>`}
           <button class="tinybtn" onclick="delReserva('${r.id}')">🗑</button>

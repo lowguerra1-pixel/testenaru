@@ -12,6 +12,7 @@
     --green:#3f9e6b; --amber:#c9922b;
     --radius:16px; --shadow:0 18px 50px rgba(0,0,0,.45);
     font-synthesis:none;
+    color-scheme:dark; /* faz date-picker e selects nativos usarem tema escuro (texto claro) */
   }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0}
@@ -57,9 +58,20 @@
   .btn.ghost{background:transparent;border:1px solid var(--line);color:var(--ink);box-shadow:none;flex:0 0 auto;padding:15px 20px}
   .btn.ghost:hover{border-color:#5a4a4f;filter:none}
 
-  input,select,textarea{width:100%;background:var(--bg2);border:1px solid var(--line);color:var(--ink);padding:14px 15px;border-radius:12px;font-size:15px;font-family:inherit;outline:none;transition:.15s}
+  input,select,textarea{width:100%;background:var(--bg2);border:1px solid var(--line);color:var(--ink);padding:14px 15px;border-radius:12px;font-size:15px;font-family:inherit;outline:none;transition:.15s;color-scheme:dark}
   input:focus,select:focus,textarea:focus{border-color:var(--red2);box-shadow:0 0 0 3px rgba(225,29,42,.14)}
   textarea{resize:vertical;min-height:80px}
+  /* dropdown estilizado + garantia de contraste das opções */
+  select{
+    -webkit-appearance:none;appearance:none;cursor:pointer;padding-right:44px;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%23c8a45c' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+    background-repeat:no-repeat;background-position:right 15px center;
+  }
+  select:hover{border-color:#5a4a4f}
+  option,optgroup{background:#241d20;color:var(--ink)}
+  option:disabled{color:var(--muted)}
+  /* ícone do calendário do input date visível no escuro */
+  input[type="date"]::-webkit-calendar-picker-indicator{filter:invert(.8) sepia(.4) saturate(3) hue-rotate(2deg);cursor:pointer}
   label.f{display:block;margin-bottom:18px}
   label.f>span{display:block;font-size:12.5px;color:var(--muted);margin-bottom:8px}
   .row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
@@ -386,25 +398,30 @@ function pickDate(){
   draft.time=null; next();
 }
 function stepParty(){
-  const opts=[1,2,3,4,5,6,7,8];
-  const chips=opts.map(n=>`<div class="chip ${draft.party===n?'sel':''}" onclick="setParty(${n})">${n}${n===8?'+':''}<small>${n===1?'pessoa':'pessoas'}</small></div>`).join("");
-  const big = draft.party>8 ? `<label class="f" style="margin-top:16px"><span>Grupo grande — informe o total</span><input type="number" min="9" max="40" value="${draft.party}" onchange="draft.party=Math.max(1,+this.value||1);renderQuiz()"></label>`:"";
+  const chips=[1,2,3,4,5,6,7,8].map(n=>`<div class="chip ${draft.party===n?'sel':''}" onclick="setParty(${n})">${n}<small>${n===1?'pessoa':'pessoas'}</small></div>`).join("");
+  let bigOpts="";
+  for(let n=9;n<=20;n++) bigOpts+=`<option value="${n}" ${draft.party===n?'selected':''}>${n} pessoas</option>`;
+  bigOpts+=`<option value="25" ${draft.party>20?'selected':''}>Mais de 20 (evento / espaço privativo)</option>`;
   return `<div class="step">
     <div class="q-ki">QUANTOS</div>
     <h2 class="q-title">Quantas pessoas?</h2>
-    <p class="q-sub">Selecione o tamanho do grupo. Para grupos acima de 8, toque em <b>8+</b>.</p>
-    <div class="chips">${chips}</div>${big}
+    <p class="q-sub">Toque no número. Para grupos maiores, escolha no menu abaixo.</p>
+    <div class="chips">${chips}</div>
+    <label class="f" style="margin-top:18px"><span>Grupo maior?</span>
+      <select onchange="setPartySelect(this.value)">
+        <option value="" ${draft.party<=8?'selected':''} disabled>Selecione o número de pessoas…</option>
+        ${bigOpts}
+      </select>
+    </label>
+    <p class="hint">Selecionado: <b style="color:var(--ink)">${draft.party} ${draft.party===1?'pessoa':'pessoas'}</b></p>
     <div class="nav">
       <button class="btn ghost" onclick="back()">← Voltar</button>
       <button class="btn" onclick="next()">Continuar →</button>
     </div>
   </div>`;
 }
-function setParty(n){
-  draft.party = n===8 ? Math.max(8,draft.party>8?draft.party:8) : n;
-  if(n===8 && draft.party<=8) draft.party=8;
-  draft.time=null; renderQuiz();
-}
+function setParty(n){ draft.party=n; draft.time=null; renderQuiz(); }
+function setPartySelect(v){ if(!v) return; draft.party=Math.max(1,+v||1); draft.time=null; renderQuiz(); }
 function stepArea(){
   const cards=REST.areas.map(a=>{
     // maior disponibilidade do dia como referência

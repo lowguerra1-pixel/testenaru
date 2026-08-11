@@ -120,9 +120,13 @@
   .notice b{color:#f0c876}
   /* mapa de assentos */
   .seatmap-scroll{overflow-x:auto;padding:4px 0 8px;margin-top:6px;-webkit-overflow-scrolling:touch}
-  .seatmap{min-width:max-content;margin:0 auto;padding:16px 18px;background:radial-gradient(120% 120% at 50% 0%,#241c1f,#161113);border:1px solid var(--line);border-radius:18px;display:flex;flex-direction:column;gap:14px}
-  .seat-row{display:flex;gap:9px;justify-content:center}
-  .counter{height:34px;border-radius:9px;background:linear-gradient(180deg,#7a5a34,#4d3820);border:1px solid #8a663b;display:flex;align-items:center;justify-content:center;color:#f0dcb6;font-size:11px;letter-spacing:.16em;text-transform:uppercase;box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 4px 12px rgba(0,0,0,.3)}
+  /* balcão em L: braço vertical (v) + braço horizontal (h) unidos no canto */
+  .lmap{display:grid;grid-template-columns:auto auto 1fr;grid-template-rows:auto auto auto;min-width:max-content;margin:0 auto;padding:18px 22px 20px;background:radial-gradient(130% 120% at 22% 0%,#241c1f,#161113);border:1px solid var(--line);border-radius:18px}
+  .v-seats{grid-column:1;grid-row:1;display:flex;flex-direction:column;gap:9px;padding-right:9px;justify-content:flex-start}
+  .v-bar{grid-column:2;grid-row:1;min-width:30px;border-radius:11px 11px 0 0;background:linear-gradient(90deg,#5a4224,#7a5a34);border:1px solid #8a663b;border-bottom:0;box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}
+  .h-bar{grid-column:2 / 4;grid-row:2;height:30px;border-radius:0 11px 0 0;background:linear-gradient(180deg,#7a5a34,#4d3820);border:1px solid #8a663b;display:flex;align-items:center;justify-content:flex-start;color:#f0dcb6;font-size:11px;letter-spacing:.16em;text-transform:uppercase;box-shadow:inset 0 1px 0 rgba(255,255,255,.14),0 5px 14px rgba(0,0,0,.3)}
+  .h-bar span{position:sticky;left:16px;padding-left:8px}
+  .h-seats{grid-column:2 / 4;grid-row:3;display:flex;gap:9px;padding-top:9px}
   .seat{width:40px;height:40px;border-radius:50%;border:2px solid transparent;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:.12s;font-family:inherit;flex:0 0 auto}
   .seat.av{background:linear-gradient(180deg,#4bb47e,#3f9e6b);color:#05130c}
   .seat.av:hover{filter:brightness(1.12);transform:translateY(-2px)}
@@ -358,8 +362,8 @@
 const REST = {
   name:"NARU PRIME",
   areas:[
-    {id:"balcao_1", name:"Balcão 1", desc:"Balcão · 10 lugares", cap:10, icon:"🍶", reserva:"primeiros", seatPrefix:"B1"},
-    {id:"balcao_2", name:"Balcão 2", desc:"Balcão · 28 lugares", cap:28, icon:"🍣", reserva:"primeiros", seatPrefix:"B2"},
+    {id:"balcao_1", name:"Balcão 1", desc:"Balcão · 10 lugares", cap:10, icon:"🍶", reserva:"primeiros", seatPrefix:"B1", seatLayout:{v:5,h:5}},
+    {id:"balcao_2", name:"Balcão 2", desc:"Balcão · 28 lugares", cap:28, icon:"🍣", reserva:"primeiros", seatPrefix:"B2", seatLayout:{v:4,h:24}},
     {id:"mesas",    name:"Mesas",    desc:"Salão · 40 lugares",  cap:40, icon:"🍽️", reserva:"aberto"},
   ],
   hours:{
@@ -425,7 +429,7 @@ function isReservable(d,t,a){ return reservaMode(a)==="aberto" ? true : periodsF
 /* ---- assentos (só balcões) ---- */
 function hasSeatMap(a){ return !!areaById(a)?.seatPrefix; }
 function seatIds(a){ const ar=areaById(a); if(!ar?.seatPrefix) return []; const out=[]; for(let i=1;i<=ar.cap;i++) out.push(ar.seatPrefix+"-"+String(i).padStart(2,"0")); return out; }
-function seatRows(a){ const ids=seatIds(a); const half=Math.ceil(ids.length/2); return {top:ids.slice(0,half), bottom:ids.slice(half)}; }
+function seatArms(a){ const L=areaById(a)?.seatLayout||{v:0,h:0}; const ids=seatIds(a); return {vertical:ids.slice(0,L.v), horizontal:ids.slice(L.v)}; }
 function occupiedSeats(d,t,a){ const set=new Set(); reservas.forEach(r=>{ if(r.date===d&&r.time===t&&r.area===a&&r.status!=="cancelada"&&r.status!=="noshow"&&Array.isArray(r.seats)) r.seats.forEach(s=>set.add(s)); }); return set; }
 
 /* ---- presença / atraso / no-show ---- */
@@ -629,12 +633,13 @@ function stepSeats(){
   const a=areaById(draft.area);
   const occ=occupiedSeats(draft.date,draft.time,draft.area);
   draft.seats=(draft.seats||[]).filter(s=>!occ.has(s)); // solta assentos que ficaram ocupados
-  const rows=seatRows(draft.area);
+  const arms=seatArms(draft.area);
   const need=draft.party, chosen=draft.seats.length;
-  const map=`<div class="seatmap-scroll"><div class="seatmap">
-      <div class="seat-row">${rows.top.map(id=>seatBtn(id,occ)).join("")}</div>
-      <div class="counter"><span>${a.name}</span></div>
-      <div class="seat-row">${rows.bottom.map(id=>seatBtn(id,occ)).join("")}</div>
+  const map=`<div class="seatmap-scroll"><div class="lmap">
+      <div class="v-seats">${arms.vertical.map(id=>seatBtn(id,occ)).join("")}</div>
+      <div class="v-bar"></div>
+      <div class="h-bar"><span>${a.name}</span></div>
+      <div class="h-seats">${arms.horizontal.map(id=>seatBtn(id,occ)).join("")}</div>
     </div></div>`;
   const legend=`<div class="legend"><span><i class="dots av"></i>Disponível</span><span><i class="dots oc"></i>Ocupado</span><span><i class="dots se"></i>Selecionado</span></div>`;
   return `<div class="step">
